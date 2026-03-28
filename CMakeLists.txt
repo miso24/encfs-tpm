@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
-project(encfs-tpm)
+project(encfs-tpm VERSION 0.1.0)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -26,6 +26,9 @@ target_link_libraries(encfs-core PUBLIC
 
 add_executable(encfs-tpm src/fs.c src/main.c)
 
-target_compile_definitions(encfs-tpm PRIVATE FUSE_USE_VERSION=31)
+target_compile_definitions(encfs-tpm
+    PRIVATE FUSE_USE_VERSION=31
+    ENCFS_VERSION_STR="${PROJECT_VERSION}"
+)
 target_include_directories(encfs-tpm PRIVATE ${FUSE_INCLUDE_DIRS})
 target_link_libraries(encfs-tpm PRIVATE ${FUSE_LIBRARIES} encfs-core)

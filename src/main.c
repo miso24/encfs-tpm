@@ -14,13 +14,14 @@
 
 enum {
     OPT_KEY_HELP,
-    OPT_KEY_encrypted_dir,
-    OPT_KEY_TCTI,
+    OPT_KEY_VERSION,
 };
 
 static struct fuse_opt encfs_opts[] = {
     FUSE_OPT_KEY("-h", OPT_KEY_HELP),
     FUSE_OPT_KEY("--help", OPT_KEY_HELP),
+    FUSE_OPT_KEY("-v", OPT_KEY_VERSION),
+    FUSE_OPT_KEY("--version", OPT_KEY_VERSION),
     ENCFS_OPT("-e %s", encrypted_dir, 0),
     ENCFS_OPT("--encrypted-path %s", encrypted_dir, 0),
     ENCFS_OPT("--tcti %s", tcti, 0),
@@ -108,6 +109,12 @@ static int encfs_opt_proc(void *data, const char *arg, int key, struct fuse_args
             fuse_opt_add_arg(outargs, "-h");
             fuse_main(outargs->argc, outargs->argv, &encfs_ops, NULL);
             exit(1);
+
+        case OPT_KEY_VERSION:
+            fprintf(stderr, "encfs-tpm version %s\n", ENCFS_VERSION_STR);
+            fuse_opt_add_arg(outargs, "--version");
+            fuse_main(outargs->argc, outargs->argv, &encfs_ops, NULL);
+            exit(0);
     }
     return 1;
 }
