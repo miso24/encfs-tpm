@@ -391,6 +391,78 @@ static int encfs_truncate(const char *path, off_t size, struct fuse_file_info *f
     return 0;
 }
 
+static int encfs_mkdir(const char *path, mode_t mode) {
+    encfs_state_t *state = (encfs_state_t*)fuse_get_context()->private_data;
+    int res;
+
+    ENCFS_PATH(encfs_path, state, path);
+
+    res = mkdir(encfs_path, mode);
+    if (res == -1) {
+        return -errno;
+    }
+    return 0;
+}
+
+static int encfs_unlink(const char *path) {
+    encfs_state_t *state = (encfs_state_t*)fuse_get_context()->private_data;
+    int res;
+
+    ENCFS_PATH(encfs_path, state, path);
+
+    res = unlink(encfs_path);
+    if (res == -1) {
+        return -errno;
+    }
+    return 0;
+}
+
+static int encfs_rmdir(const char *path) {
+    encfs_state_t *state = (encfs_state_t*)fuse_get_context()->private_data;
+    int res;
+
+    ENCFS_PATH(encfs_path, state, path);
+
+    res = rmdir(encfs_path);
+    if (res == -1) {
+        return -errno;
+    }
+    return 0;
+}
+
+static int encfs_rename(const char *from, const char *to, unsigned int flags) {
+    encfs_state_t *state = (encfs_state_t*)fuse_get_context()->private_data;
+    int res;
+
+    if (flags) {
+        return -EINVAL;
+    }
+
+    ENCFS_PATH(encfs_from, state, from);
+    ENCFS_PATH(encfs_to, state, to);
+
+    res = rename(encfs_from, encfs_to);
+    if (res == -1) {
+        return -errno;
+    }
+    return 0;
+}
+
+static int encfs_chmod(const char *path, mode_t mode, struct fuse_file_info *fi) {
+    (void)fi;
+
+    encfs_state_t *state = (encfs_state_t*)fuse_get_context()->private_data;
+    int res;
+
+    ENCFS_PATH(encfs_path, state, path);
+
+    res = chmod(encfs_path, mode);
+    if (res == -1) {
+        return -errno;
+    }
+    return 0;
+}
+
 struct fuse_operations encfs_ops = {
     .init = encfs_init,
     .getattr = encfs_getattr,
@@ -401,4 +473,9 @@ struct fuse_operations encfs_ops = {
     .read = encfs_read,
     .release = encfs_release,
     .truncate = encfs_truncate,
+    .mkdir = encfs_mkdir,
+    .rmdir = encfs_rmdir,
+    .unlink = encfs_unlink,
+    .rename = encfs_rename,
+    .chmod = encfs_chmod,
 };
