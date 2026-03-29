@@ -37,6 +37,22 @@ size_t calc_raw_file_size(size_t file_size) {
     return raw_size;
 }
 
+bool is_encfs_file(int fd) {
+    struct stat st;
+    char buf[ENCFS_HEADER_SIZE];
+
+    if (fstat(fd, &st) == -1) {
+        return false;
+    }
+
+    if (st.st_size < ENCFS_HEADER_SIZE) {
+        return false;
+    }
+
+    ssize_t res = read(fd, buf, ENCFS_HEADER_SIZE);
+    return res == ENCFS_HEADER_SIZE && memcmp(buf, ENCFS_MAGIC, ENCFS_MAGIC_SIZE) == 0;
+}
+
 static void *encfs_init(struct fuse_conn_info *conn, struct fuse_config *cfg) {
     (void)conn;
 
@@ -160,28 +176,33 @@ static int encfs_create(const char *path, mode_t mode, struct fuse_file_info *fi
 
 static int encfs_open(const char *path, struct fuse_file_info *fi) {
     uint8_t salt[ENCFS_SALT_SIZE];
-    uint8_t header[ENCFS_PREAMBLE_SIZE];
-    int fd, n;
+    bool need_truncate;
+    int fd, flags, n;
 
     encfs_state_t *state = (encfs_state_t*)fuse_get_context()->private_data;
 
     ENCFS_PATH(encfs_path, state, path);
 
-    int flags = fi->flags;
+    flags = fi->flags;
+    need_truncate = (flags & O_TRUNC) != 0;
     if ((flags & O_ACCMODE) == O_WRONLY) {
         flags = (flags & ~O_ACCMODE) | O_RDWR;
     }
     flags &= ~O_APPEND;
+    flags &= ~O_TRUNC;
 
     fd = open(encfs_path, flags);
     if (fd == -1) {
         return -errno;
     }
 
-    n = pread(fd, header, ENCFS_PREAMBLE_SIZE, 0);
-    if (memcmp(header, ENCFS_MAGIC, ENCFS_MAGIC_SIZE) != 0 || header[ENCFS_MAGIC_SIZE] != ENCFS_VERSION) {
+    if (!is_encfs_file(fd)) {
         close(fd);
         return -EIO;
+    }
+
+    if (need_truncate) {
+        ftruncate(fd, ENCFS_HEADER_SIZE);
     }
 
     n = pread(fd, salt, ENCFS_SALT_SIZE, ENCFS_PREAMBLE_SIZE);
@@ -326,22 +347,47 @@ static int encfs_read(const char *path, char *buf, size_t size, off_t offset, st
     return bytes_read;
 }
 
-static int encfs_truncate(const char *path, off_t size, struct fuse_file_info *fi) {
-    encfs_file_t *file = (encfs_file_t*)fi->fh;
-    encfs_state_t *state = (encfs_state_t*)fuse_get_context()->private_data;
+int truncate_regular_file(int fd, off_t size) {
     int res;
 
-    ENCFS_PATH(encfs_path, state, path);
-
-    /*
-     * TODO: impl
-     */
-
-    res = truncate(encfs_path, size);
+    res = ftruncate(fd, size);
     if (res == -1) {
         return -errno;
     }
+    return 0;
+}
 
+static int encfs_truncate(const char *path, off_t size, struct fuse_file_info *fi) {
+    encfs_file_t *file = NULL;
+    encfs_state_t *state = (encfs_state_t*)fuse_get_context()->private_data;
+    bool need_close = false;
+    int fd, res;
+
+    ENCFS_PATH(encfs_path, state, path);
+
+    if (fi != NULL) {
+        file = (encfs_file_t*)fi->fh;
+        fd = file->fd;
+    } else {
+        fd = open(encfs_path, O_RDWR);
+        if (!is_encfs_file(fd)) {
+            res = truncate_regular_file(fd, size);
+            close(fd);
+            return res;
+        }
+        need_close = true;
+    }
+
+    if (size == 0) {
+        ftruncate(fd, ENCFS_HEADER_SIZE);
+    } else {
+        // unimplemented
+        return -ENOSYS;
+    }
+
+    if (need_close) {
+        close(fd);
+    }
     return 0;
 }
 
